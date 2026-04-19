@@ -189,23 +189,46 @@ class YaDiskClient:
         raise RuntimeError(f"Не удалось получить публичную ссылку для {remote_path}")
 
     def upload_file(self, local_file: Path, remote_file_path: str, overwrite: bool) -> bool:
+        import time
+        from requests.exceptions import SSLError, ConnectionError, Timeout
+
         remote_file_path = self.normalize_path(remote_file_path)
 
         if not overwrite and self.resource_exists(remote_file_path):
             return False
 
         href, method = self.get_upload_link(remote_file_path, overwrite)
-        with local_file.open("rb") as f:
-            response = requests.request(
-                method=method,
-                url=href,
-                data=f,
-                headers={"Content-Type": "application/octet-stream"},
-                timeout=UPLOAD_TIMEOUT,
-            )
-        if response.status_code not in (201, 202):
-            self._safe_raise(response, f"Не удалось загрузить {remote_file_path}")
-        return True
+
+        last_error = None
+        for attempt in range(5):
+            try:
+                with local_file.open("rb") as f:
+                    response = requests.request(
+                        method=method,
+                        url=href,
+                        data=f,
+                        headers={"Content-Type": "application/octet-stream"},
+                        timeout=UPLOAD_TIMEOUT,
+                    )
+
+                if response.status_code not in (201, 202):
+                    self._safe_raise(response, f"Не удалось загрузить {remote_file_path}")
+
+                return True
+
+            except (SSLError, ConnectionError, Timeout) as e:
+                last_error = e
+                if attempt < 4:
+                    time.sleep(1.5 * (attempt + 1))
+                else:
+                    raise RuntimeError(
+                        f"Не удалось загрузить {remote_file_path} после 5 попыток: {e}"
+                    ) from e
+
+        if last_error:
+            raise RuntimeError(f"Не удалось загрузить {remote_file_path}: {last_error}")
+
+        return False
 
 
 class ConverterUploader:
