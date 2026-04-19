@@ -162,7 +162,7 @@ class YaDiskClient:
         url = public_url.strip()
         if not url:
             return url
-        url = url.replace("https://disk.360.yandex.ru/", "https://disk.yandex.ru/")
+        url = url.replace("https://yadi.sk/", "https://disk.yandex.ru/")
         if not url.lower().endswith(".jpg"):
             url = f"{url}.jpg"
         return url
